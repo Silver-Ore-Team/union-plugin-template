@@ -1,4 +1,4 @@
-# union-plugin-template
+﻿# union-plugin-template
 
 Template for creating Union plugins based on [union-api](https://gitlab.com/union-framework/union-api) and CMake as the buildsystem generator.
 
@@ -9,6 +9,7 @@ Clone this repository and update submodules to fetch the dependencies.
 ```sh
 git clone git@github.com:Silver-Ore-Team/union-plugin-template.git MyUnionPlugin
 cd MyUnionPlugin
+git submodule init
 git submodule update --remote --recursive
 ```
 
@@ -36,13 +37,19 @@ The project name is used as DLL file name.
 Plugin code is created in `plugin/src/`.
 This template is designed for multiplatform plugin development, so it contains some non-standard includes trickery. 
 
-`Plugin.cpp` is a compiled file, so it's the entrypoint fof compilation. 
-It includes `Plugin.hpp` for each engine version and provides defines of it.
+`Plugin.cpp` is a compiled file and the entrypoint for compilation. It includes `Plugin.hpp` for each engine version and `Plugin_[Engine].hpp` for the specific engine.
 
 `Plugin.hpp` contains the code that's the same for each engine by using `GOTHIC_NAMESPACE` define that's correspond to one of engine namespaces.
-If you need to write some part of code specifically for single engine, you can put it into a separate file and include in `Plugin.cpp`.
+If you need to write some part of code specifically for single engine, you can put it into a special `Plugin_[Engine].hpp` file.
 
-`Game.hpp` is also included by the  entrypoint, but only once and it contains plugin exports for Union game events.
+`Game.hpp` is also included by the entrypoint, and it contains exports for Union events outside of `GOTHIC_NAMESPACE`. 
+
+If you are new to `union-api`, you should also read:
+* [union-api: How it works](https://gitlab.com/union-framework/union-api/-/wikis/how-it-works)
+* [union-api: Hooks](https://gitlab.com/union-framework/union-api/-/wikis/Hooks)
+* [gothic-api: Multiplatform development](https://gitlab.com/union-framework/gothic-api/-/wikis/Multiplatform-development)
+
+The template already implements the multiplaform setup, but please try to read about this, because it's easy to mess up and crash the game 😨
 
 ### Adding additional .cpp files
 
@@ -87,15 +94,46 @@ __declspec(dllexport) void Game_Entry() {
 }
 ```
 
+Alternative method is to use `zSwitch` to get the method reference.
+
+```cpp
+__declspec(dllexport) void Game_Entry() {
+	int virtualPos = 42;
+	int pixelPos;
+
+	auto VirtualToPixelFunction = zSwitch(Gothic_I_Classic::VirtualToPixelX, Gothic_I_Addon::VirtualToPixelX, Gothic_II_Classic::VirtualToPixelX, Gothic_II_Addon::VirtualToPixelX)
+
+	pixelPos = VirtualToPixelFunction(virtualPos);
+}
+```
+
 ### Gothic_UserAPI
 
 [gothic-api](https://gitlab.com/union-framework/gothic-api) includes an inline file for every ZenGin class and let us define additional methods that are handly for hooks on `__thiscall` functions.
 The template holds all these inline files in `gothic-userapi` and dynamically overlays them on original `gothic-api` files copied to working directory during a build.
-This way we can make us of them without editing anything in `gothic-api` submodule.
+This way we can make use of them without editing anything in `gothic-api` submodule.
+
+### Restricting multiplatform build
+
+By default the tempalate builds the plugin for each of Gothic engine versions. If you'd like to restrict that, remove compile flags from `plugin/CMakeLists.txt`
+
+```cmake
+# Build for every engine
+target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE _UNION_API_DLL __G1 __G1A __G2 __G2A)
+
+# Build only for Gothic I and Gothic II NotR
+target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE _UNION_API_DLL __G1 __G2A)
+
+# Build only for Gothic I
+target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE _UNION_API_DLL __G1)
+
+# Build only for Gothic II NotR
+target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE _UNION_API_DLL __G2A)
+```
 
 ## Building
 
-The simplest way to build the project is to open it inside Visual Studio 2022. It will automatically parse and configure CMake.
+The simplest way to build the project is to open it inside Visual Studio 2022 with MSVC toolset 14.34+. It will automatically parse and configure CMake.
 
 ### Manual CMake
 
@@ -126,3 +164,9 @@ After you get the dependency to expose a CMake target, you can link the plugin a
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE union-api gothic-api MyDependency::MyDependency)
 # ...
 ```
+
+## License
+
+union-plugin-template is licensed under [MIT license](LICENSE), excluding dependencies.
+
+[union-api](https://gitlab.com/union-framework/union-api) and [gothic-api](https://gitlab.com/union-framework/gothic-api) are licensed under [GNU GENERAL PUBLIC LICENSE V3](https://gitlab.com/union-framework/union-api-/blob/main/LICENSE).
